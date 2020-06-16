@@ -150,6 +150,30 @@ class MiniSpartan6(Board):
         prog = self.platform.create_programmer()
         prog.load_bitstream("build/minispartan6/gateware/top.bit")
 
+class QMTechA7DDR3(Board):
+    SPIFLASH_PAGE_SIZE    = 256
+    SPIFLASH_SECTOR_SIZE  = 64*kB
+    SPIFLASH_DUMMY_CYCLES = 11
+    def __init__(self):
+        from litex_boards.targets import qmtech_a7ddr3
+        Board.__init__(self, qmtech_a7ddr3.BaseSoC, {"serial", "spiflash"})
+    def load(self):
+        prog = self.platform.create_programmer()
+        prog.load_bitstream("build/qmtech_a7ddr3/gateware/top.bit")
+    def flash(self):
+        flash_regions = {
+            "buildroot/Image.fbi":             "0x00000000", # Linux Image: copied to 0xc0000000 by bios
+            "buildroot/rootfs.cpio.fbi":       "0x00500000", # File System: copied to 0xc0800000 by bios
+            "buildroot/rv32.dtb.fbi":          "0x00d00000", # Device tree: copied to 0xc1000000 by bios
+            "emulator/emulator.bin.fbi":       "0x00e00000", # MM Emulator: copied to 0xc1100000 by bios
+        }
+        prog = self.platform.create_programmer()
+        prog.set_flash_proxy_dir(".")
+        for filename, base in flash_regions.items():
+            base = int(base, 16)
+            print("Flashing {} at 0x{:08x}".format(filename, base))
+            prog.flash(base, filename)
+
 # Pipistrello support ------------------------------------------------------------------------------
 
 class Pipistrello(Board):
@@ -280,6 +304,14 @@ class De0Nano(Board):
         prog = self.platform.create_programmer()
         prog.load_bitstream("build/de0nano/gateware/top.sof")
 
+class QMTechC10Starter(Board):
+    def __init__(self):
+        from litex_boards.targets import qmtech_c10starter
+        Board.__init__(self, qmtech_c10starter.BaseSoC, {"serial"})
+    def load(self):
+        prog = self.platform.create_programmer()
+        prog.load_bitstream("build/qmtech_c10starter/gateway/top.sof")
+
 # Main ---------------------------------------------------------------------------------------------
 
 supported_boards = {
@@ -295,6 +327,7 @@ supported_boards = {
     "nexys4ddr":    Nexys4DDR,
     "nexys_video":  NexysVideo,
     "minispartan6": MiniSpartan6,
+    "qmtech_a7ddr3": QMTechA7DDR3,
     "pipistrello":  Pipistrello,
 
     # Lattice
@@ -310,6 +343,7 @@ supported_boards = {
     "de0nano":      De0Nano,
     "de10lite":     De10Lite,
     "de10nano":     De10Nano,
+    "qmtech_c10starter": QMTechC10Starter,
 }
 
 def main():
@@ -346,12 +380,16 @@ def main():
         # SoC parameters (and override for boards that don't support default parameters) -----------
         soc_kwargs = {}
         soc_kwargs.update(integrated_rom_size=0x10000)
-        if board_name in ["de0nano", "orangecrab"]:
+        if board_name in ["de0nano", "orangecrab", "qmtech_c10starter"]:
             soc_kwargs.update(l2_size=2048) # Not enough blockrams for default l2_size of 8192
+            soc_kwargs.update(integrated_rom_size=20*kB)
         if board_name in ["kc705"]:
             soc_kwargs.update(uart_baudrate=500e3) # Set UART baudrate to 500KBauds since 1Mbauds not supported
         if board_name in ["de10nano"]:
             soc_kwargs.update(with_mister_sdram=True)
+        # qmtech boards seem to have issues with higher baud rates
+        if board_name.startswith("qmtech_a7ddr3"):
+            soc_kwargs.update(uart_baudrate=115200)
         if "usb_fifo" in board.soc_capabilities:
             soc_kwargs.update(uart_name="usb_fifo")
         if "usb_acm" in board.soc_capabilities:
